@@ -1,0 +1,29 @@
+{
+  "name": "yourstock",
+  "version": "1.0.0",
+  "description": "Follow the stock market with peers using websockets",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lcneves/yourstock.git"
+  },
+  "keywords": [
+    "freeCodeCamp",
+    "stock",
+    "market",
+    "websocket"
+  ],
+  "author": "Lucas Neves",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/lcneves/yourstock/issues"
+  },
+  "homepage": "https://github.com/lcneves/yourstock#readme",
+  "dependencies": {
+    "express": "^4.13.3",
+    "ws": "^0.8.1"
+  }
+}
