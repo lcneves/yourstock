@@ -1,5 +1,4 @@
-var BARCHART_API_KEY = '0ad7bb82e7ddbd05211965fdecfad21b',
-    PORT = process.env.PORT || 8080,
+var PORT = process.env.PORT || 8080,
     http = require("http"),
     https = require("https"),
     express = require('express'),
@@ -8,9 +7,6 @@ var BARCHART_API_KEY = '0ad7bb82e7ddbd05211965fdecfad21b',
     WebSocketServer = require('ws').Server,
     wss = new WebSocketServer({ server: server });
     
-// Testing requirements
-var util = require('util');
-
 // Serve static HTML and JS files from the "public" dir.
 app.use(express.static('public'));
 
