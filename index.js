@@ -1,6 +1,7 @@
 var BARCHART_API_KEY = '0ad7bb82e7ddbd05211965fdecfad21b',
     PORT = process.env.PORT || 8080,
     http = require("http"),
+    https = require("https"),
     express = require('express'),
     app = express(),
     server = http.createServer(app),
@@ -14,28 +15,88 @@ var util = require('util');
 app.use(express.static('public'));
 
 // The stocks to follow are in an array.
-var stocksArray = ['AAPL', 'QQQ', 'MSFT'];
+var stocksArray = [
+    {name: 'AAPL', data: []},
+    {name: 'QQQ', data: []},
+    {name: 'MSFT', data: []}
+];
 
-// Test WS
+var getStockHistory = function(stock, callback) {
+    var date = new Date();
+    var lastYear = (date.getFullYear() - 1).toString();
+    var thisYear = date.getFullYear().toString();
+    var month = ('0' + (date.getMonth() + 1).toString()).slice(-2);
+    var day = ('0' + date.getDate().toString()).slice(-2);
+    var options = {
+        host: 'query.yahooapis.com',
+        path: '/v1/public/yql?q=select%20*%20from%20yahoo.finance.historicaldata%20where%20symbol%20%3D%20%22' + stock + '%22%20and%20startDate%20%3D%20%22' + lastYear + '-' + month + '-' + day + '%22%20and%20endDate%20%3D%20%22' + thisYear + '-' + month + '-' + day + '%22&format=json&env=store%3A%2F%2Fdatatables.org%2Falltableswithkeys'
+    };
+    https.get(options, function(res) {
+        var body = '';
+        res.on('data', function(chunk) {
+            body += chunk;
+        }).on('end', function() {
+            var sendArray;
+            var data = JSON.parse(body);
+            if (data.query.results) {
+                sendArray = [];
+                data.query.results.quote.forEach(function(each) {
+                    sendArray.unshift([new Date(each.Date).getTime(), parseFloat(each.Close)]);
+                });
+            } else { sendArray = false; }
+            callback(sendArray);
+        });
+    });
+};
+
+var refreshStockInfo = function(callback) {
+    var newStocksArray = [];
+    var count = 0;
+    stocksArray.forEach(function(element, index, array) {
+        getStockHistory(element.name, function(stockHistoryArray) {
+            if (stockHistoryArray) {
+                newStocksArray.push({name: element.name, data: stockHistoryArray});
+            }
+            count++;
+            if (count == array.length) {
+                stocksArray = newStocksArray.slice(0);
+                callback();
+            }
+        });
+    });
+}
 
 wss.on('connection', function connection(ws) {
     ws.on('message', function incoming(message) {
-        console.log('received: %s', message);
         var data = JSON.parse(message);
+        var index = -1;
+        stocksArray.forEach(function(element, localIndex, array) {
+            if (element.name == data.stock) { index = localIndex; }
+        });
         if (data.add) {
-            if (stocksArray.indexOf(data.stock) == -1) {
-                stocksArray.push(data.stock);
-                wss.broadcast();
+            if (index == -1) {
+                getStockHistory(data.stock, function(stockHistoryArray) {
+                    if (stockHistoryArray) {
+                        stocksArray.push({name: data.stock, data: stockHistoryArray});
+                        wss.broadcast();
+                    } else {
+                        sendError('Stock ' + data.stock + ' not found');
+                    }
+                });
             } else {
                 sendError('Stock ' + data.stock + ' is already being watched');
             }
         }
         if (data.remove) {
-            var index = stocksArray.indexOf(data.stock);
             if (index != -1) {
                 stocksArray.splice(index, 1);
             }
             wss.broadcast();
+        }
+        if (data.refresh) {
+            refreshStockInfo(function() {
+                wss.broadcast();
+            });
         }
     });
     
@@ -55,40 +116,10 @@ wss.on('connection', function connection(ws) {
         }));
     };
     
-    var getStockHistory = function(stock) {
-        var date = new Date();
-        var lastYear = (date.getFullYear() - 1).toString() + (date.getMonth() + 1).toString() + date.getDate().toString() + '000000';
-        var options = {
-            host: 'marketdata.websol.barchart.com',
-            path: '/getHistory.json?key=' + BARCHART_API_KEY + '&symbol=' + stock + '&type=daily&startDate=' + lastYear;
-        };
-
-            var req = http.get(options, function(res) {
-                var body = '';
-                res.on('data', function(chunk) {
-                    body += chunk;
-                }).on('end', function() {
-                    var data = JSON.parse(body);
-                    if (data.status.code == 200) {
-                        var sendArray = [];
-                        data.results.forEach(function(each) {
-                            sendArray.push({
-                                
-                            });
-                        });
-                    } else {
-                        
-                    }
-                })
-            });
-
-            req.on('error', function(e) {
-            console.log('ERROR: ' + e.message);
-            });
-    }
-    
-    sendStocks();
+    wss.broadcast();
 });
 
-// Start listening to connections
-server.listen(PORT, function() { console.log('Listening on ' + server.address().port) });
+// Get stock history data and, when done, start listening to connections
+refreshStockInfo(function() {
+    server.listen(PORT, function() { console.log('Listening on ' + server.address().port) });
+});
